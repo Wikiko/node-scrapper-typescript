@@ -1,5 +1,7 @@
 import Scraper from './scraper';
 import requestFactory from './requestFactory';
+import { Maybe, maybe } from 'folktale';
+import {head} from 'ramda';
 
 const requestService = requestFactory({
     headers: {
@@ -12,22 +14,45 @@ const requestService = requestFactory({
 
 const scraper = new Scraper(requestService);
 
-scraper
-    .fetchPage({
-        url: 'https://www.tudogostoso.com.br/receitas/'
-    }, ($html, result) => {
-        return {
-            qtdAncoras: $html('a').length,
-        };
-    })
-    .fetchPage({
-        url: 'https://www.tudogostoso.com.br'
-    }, ($html, result: any) => {
-        return {
-            qtdAncoras: $html('a').length,
-            qtdAncorasAntiga: result['qtdAncoras'],
-        }
-    })
-    .getResult()
-    .then(result => console.log('Resultado de tudo...', result))
-    .catch(error => console.log(error.message));
+function getDomain(url: string): Maybe<string>{
+    if(!hasDomain(url)){
+        return maybe.Nothing();
+    }
+    const regexToGetDomain = /(\w{4,5}\:\/\/)?([A-z]*)(\.[a-z]*)+/g;
+    return maybe.fromNullable(regexToGetDomain.exec(url))
+    .map<string>(head);
+}
+
+function hasDomain(url: string): boolean {
+    const regexToGetDomain = /(\w{4,5}\:\/\/)?([A-z]*)(\.[a-z]*)+/g;
+    return regexToGetDomain.test(url);
+}
+
+function goToNextPage(currentPage: string): Promise<{}> {
+    return getDomain(currentPage).map<Promise<{}>>((domain) => {
+        return scraper
+            .fetchPage({
+                url: currentPage
+            }, async ($html, result) => {
+    
+                const currentPageNumber = $html('.pagination .current').text();
+    
+                console.log(`currentPage: ${currentPageNumber}`)
+    
+                if (currentPageNumber.includes('8')) {
+                    return {
+                        feito: 'ok'
+                    };
+                }
+
+                const nextPage = $html('.pagination a').first().attr('href');
+
+                return goToNextPage(hasDomain(nextPage) ? nextPage : `${domain}${nextPage}`);
+            })
+            .getResult()
+            .then(result => (console.log('Resultado de tudo...', result), result));
+    }).getOrElse(Promise.resolve({}));
+}
+
+goToNextPage('https://www.tudogostoso.com.br/receitas/')
+.catch(error => console.log(error.message));

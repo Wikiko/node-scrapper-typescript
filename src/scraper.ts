@@ -7,7 +7,7 @@ import autobind from 'autobind-decorator';
 
 const getData = prop('data');
 
-type CallbackHandle = ($html: CheerioStatic, result: {}) => ({});
+type CallbackHandle = ($html: CheerioStatic, result: {}, innerScraper: Scraper) => ({});
 
 @autobind
 class Scraper {
@@ -37,7 +37,7 @@ class Scraper {
         })
             .then<string>(getData)
             .then(cheerio.load)
-            .then($html => callbackHandle($html, this.result))
+            .then($html => callbackHandle($html, this.result, this))
             .then(this.setResult);
     }
 
